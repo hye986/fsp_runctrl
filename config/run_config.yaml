@@ -1,0 +1,153 @@
+# ============================================================
+# Run Control Configuration
+# ============================================================
+
+general:
+  experiment_name: "FSP_Runs"
+  mlflow_tracking_uri: "http://localhost:5000"
+  influx_db_uri: "http://localhost:8086"
+  state_file: ".run_state.json"
+
+  control_server:
+    host: "localhost"
+    venv: "~/software/fsp_system_test/vfsp"
+
+  daq_server:
+    host: "sulley"
+    user: "tng"
+    ssh_key: "~/.ssh/id_ed25519_sulley"
+    venv: "~/software/fsp_system_test/vfsp"
+
+run:
+  label: "Amp1G"
+  dark_frame_nr: 2000
+  dark_frame_time: 0
+  source_frame_nr: 100000             # frames per file
+  source_frame_time: 0
+  source_file_nr: 5                   # number of loop iterations
+  data_path: "~/software/fsp_system_test/daq/onlinemonitor/"        # appended with run_{id} at init
+    #data_path: "/data/fsp_data/"        # on sulley; appended with run_{id} at init
+
+  # ---- Configurations to archive in MLflow at run init ----
+  config_archive:
+
+    # Strategy 1a: resolve s7 filename from fsp_ctrlapp's own config
+    s7_config:
+      tool_config_file: "~/software/fsp_system_test/fsp_ctrlapp/configs/sys_configs.yaml"
+      keys: ["s7"]
+      files_base_path: "~/software/vimrg/vasic/XU1/drivers/spi_testing/"
+
+    # Strategy 1b: resolve chipConfig filename from same tool config, different base path
+    chip_config:
+      tool_config_file: "~/software/fsp_system_test/fsp_ctrlapp/configs/sys_configs.yaml"
+      keys: ["chipConfig"]
+      files_base_path: "~/software/fsp_system_test/fsp_ctrlapp/configs/"
+
+    # Strategy 2: archive a single local file directly (same as chip_config strategy)
+    sensor_voltage:
+      direct_file: "~/software/fsp_system_test/ccd_pwrapp/configs/pwr_up_seq.json"
+
+    # Strategy 3: fetch files from sulley via SSH
+    analysis_config:
+      host: "sulley"
+      files:
+        - "/home/tng/fsp_ana/nrstIllumi50ms.prm"
+
+# ============================================================
+# Subsystems
+# ============================================================
+
+subsystems:
+  monitor:
+    host: "localhost"
+    executable:
+      - "python3 /home/tng/software/fsp_system_test/monitoring/monitor_env.py"
+      - "python3 /home/tng/software/fsp_system_test/monitoring/monitor_vi.py"
+
+  interlock:
+    host: "localhost"
+    executable: "python "
+
+  daq:
+    host: "localhost"
+    executable: "fsp-ctrl"
+    init_cmd: ""
+    start_cmd:
+      - "start_s7"
+      - "start_daq"
+    stop_cmd: []                      # leave DAQ running between runs
+
+  asic:
+    host: "localhost"
+    executable: "fsp-ctrl"
+    start_cmd:
+      - "start_veritas"
+      - "sync_s7"
+    stop_cmd:
+      - "pwr_off_veritas"
+
+  hv:
+    host: "localhost"
+    executable: "python ~/software/fsp_system_test/ramp_hv.py"
+    ramp_up_args: "-m UP"
+    ramp_down_args: "-m DOWN"
+
+  sensor:
+    host: "localhost"
+    executable: "ccd-pwr"
+    init_cmd: "init"
+    start_cmd: "pwr_up"
+    stop_cmd: "pwr_down"
+
+  recorder:
+    host: "localhost"
+      #host: "sulley"
+      #user: "tng"
+    executable: "python ~/software/fsp_system_test/daq/onlinemonitor/udp_recorder.py"
+
+    # Single call for dark frames
+    dark_args: >-
+      --raw-only
+      --hyb-raw-output {data_path}/dark_{file_index_pad}.raw
+      --hyb-select H1
+      --max {dark_frame_nr}
+
+    # Called once per file in a loop (file_index goes 1 → source_file_nr)
+    # {file_index_pad} → 001, 002, 003 ...  matches your manual bash pattern
+    source_args: >-
+      --raw-only
+      --hyb-raw-output {data_path}/data_run{file_index_pad}_H1.raw
+      --hyb-select H1
+      --max {source_frame_nr}
+
+    #source_open_cmd: "python /path/to/motor_ctrl.py -m OPEN"
+    #source_close_cmd: "python /path/to/motor_ctrl.py -m CLOSE"
+
+  post_processing:
+    elog:
+      url: "http://your-elog-server/api/entries"
+      logbook: "FSP"
+      # auth via env var: ELOG_TOKEN
+    analysis:
+      host: "sulley"
+      user: "tng"
+      script: "/path/to/analysis.py"
+      args: "--run-id {run_id} --data-path {data_path}"
+
+# ============================================================
+# Safety
+# ============================================================
+
+safety:
+  hv_before_sensor_off: true
+  abort_order: ["hv_rampdown"]
+    #abort_order: ["hv_rampdown", "sensor_off", "asic_off"]
+  require_interlock: true
+
+# ============================================================
+# Custom user commands  (run_ctrl run <name>)
+# ============================================================
+
+custom_commands:
+  check_daq: "fsp-ctrl status"
+  show_temp: "python /path/to/read_temp.py"
