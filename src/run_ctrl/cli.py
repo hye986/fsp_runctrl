@@ -21,7 +21,7 @@ Subsystem commands (individual steps, all support: init/start/stop/run):
   asic        ASIC         (fsp-ctrl: start_veritas, sync_s7, pwr_off_veritas)
   hv          Bias voltage (up, down)
   sensor      Sensor power (init, start, stop)
-  recorder    Recorder     (dark, source [--file N], open, close)
+  recorder    Recorder     (dark, source [--file N], open, close, convert)
 """
 
 import logging
