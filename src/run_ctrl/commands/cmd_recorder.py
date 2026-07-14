@@ -235,6 +235,43 @@ def recorder_convert(ctx):
 
 
 # ================================================================== #
+# convert_clean
+# ================================================================== #
+
+@recorder_group.command("convert_clean", context_settings=CTX)
+@click.pass_context
+def recorder_convert_clean(ctx):
+    """Run alternative data conversion using a different executable.
+
+    \b
+    Uses convert_clean_executable and convert_clean_args from config.
+    Supports {data_path} and all other interpolation placeholders.
+    """
+    cfg     = load_cfg(ctx.obj["config_path"])
+    runner  = get_recorder_runner(cfg)
+    rec     = cfg["subsystems"]["recorder"]
+    run_cfg = cfg["run"]
+    state_mgr, run_id, data_path = _get_state(cfg)
+
+    convert_clean_executable = rec.get("convert_clean_executable", "")
+    convert_clean_template    = rec.get("convert_clean_args", "")
+
+    if not convert_clean_executable:
+        click.secho("convert_clean_executable not configured in recorder subsystem.", fg="red")
+        return
+    if not convert_clean_template:
+        click.secho("convert_clean_args not configured in recorder subsystem.", fg="red")
+        return
+
+    cmd = convert_clean_executable + " " + _interpolate(
+        convert_clean_template, run_cfg, run_id, data_path
+    )
+    click.echo(f"[recorder] convert_clean: {cmd}")
+    runner.run(cmd, timeout=None)
+    click.secho("✓ Alternative conversion done.", fg="green")
+
+
+# ================================================================== #
 # Helpers
 # ================================================================== #
 
